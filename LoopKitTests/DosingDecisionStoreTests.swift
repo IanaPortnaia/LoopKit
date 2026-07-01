@@ -970,6 +970,50 @@ class StoredDosingDecisionCodableTests: XCTestCase {
         )
     }
 
+    func testReplayPredictionEffectsCodable() throws {
+        let startDate = dateFormatter.date(from: "2020-05-14T22:38:15Z")!
+        let effect = GlucoseEffect(
+            startDate: startDate,
+            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: -4.5)
+        )
+        let prediction = PredictedGlucoseValue(
+            startDate: startDate,
+            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 110)
+        )
+        let counteraction = GlucoseEffectVelocity(
+            startDate: startDate.addingTimeInterval(-300),
+            endDate: startDate,
+            quantity: HKQuantity(unit: .milligramsPerDeciliterPerMinute, doubleValue: 0.2)
+        )
+        let discrepancy = GlucoseChange(
+            startDate: startDate.addingTimeInterval(-1800),
+            endDate: startDate,
+            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 4.5)
+        )
+        let original = StoredDosingDecision(
+            reason: "loop",
+            replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects(
+                enabledEffectsRawValue: 15,
+                prediction: [prediction],
+                insulin: [effect],
+                carbs: [effect],
+                momentum: [effect],
+                retrospection: [effect],
+                insulinCounteractionEffects: [
+                    StoredDosingDecision.ReplayCounteractionEffect(effect: counteraction)
+                ],
+                retrospectiveGlucoseDiscrepancies: [
+                    StoredDosingDecision.ReplayGlucoseChange(change: discrepancy)
+                ]
+            )
+        )
+
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode(StoredDosingDecision.self, from: data)
+
+        XCTAssertEqual(decoded.replayPredictionEffects, original.replayPredictionEffects)
+    }
+
     private func assertStoredDosingDecisionCodable(_ original: StoredDosingDecision, encodesJSON string: String) throws {
         let data = try encoder.encode(original)
         XCTAssertEqual(String(data: data, encoding: .utf8), string)
@@ -1011,6 +1055,7 @@ extension StoredDosingDecision: Equatable {
             lhs.insulinOnBoard == rhs.insulinOnBoard &&
             lhs.glucoseTargetRangeSchedule == rhs.glucoseTargetRangeSchedule &&
             lhs.predictedGlucose == rhs.predictedGlucose &&
+            lhs.replayPredictionEffects == rhs.replayPredictionEffects &&
             lhs.automaticDoseRecommendation == rhs.automaticDoseRecommendation &&
             lhs.manualBolusRecommendation == rhs.manualBolusRecommendation &&
             lhs.manualBolusRequested == rhs.manualBolusRequested &&

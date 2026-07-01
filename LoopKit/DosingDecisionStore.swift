@@ -255,6 +255,7 @@ public struct StoredDosingDecision {
     public var insulinOnBoard: InsulinValue?
     public var glucoseTargetRangeSchedule: GlucoseRangeSchedule?
     public var predictedGlucose: [PredictedGlucoseValue]?
+    public var replayPredictionEffects: ReplayPredictionEffects?
     public var automaticDoseRecommendation: AutomaticDoseRecommendation?
     public var manualBolusRecommendation: ManualBolusRecommendationWithDate?
     public var manualBolusRequested: Double?
@@ -280,6 +281,7 @@ public struct StoredDosingDecision {
                 insulinOnBoard: InsulinValue? = nil,
                 glucoseTargetRangeSchedule: GlucoseRangeSchedule? = nil,
                 predictedGlucose: [PredictedGlucoseValue]? = nil,
+                replayPredictionEffects: ReplayPredictionEffects? = nil,
                 automaticDoseRecommendation: AutomaticDoseRecommendation? = nil,
                 manualBolusRecommendation: ManualBolusRecommendationWithDate? = nil,
                 manualBolusRequested: Double? = nil,
@@ -304,6 +306,7 @@ public struct StoredDosingDecision {
         self.insulinOnBoard = insulinOnBoard
         self.glucoseTargetRangeSchedule = glucoseTargetRangeSchedule
         self.predictedGlucose = predictedGlucose
+        self.replayPredictionEffects = replayPredictionEffects
         self.automaticDoseRecommendation = automaticDoseRecommendation
         self.manualBolusRecommendation = manualBolusRecommendation
         self.manualBolusRequested = manualBolusRequested
@@ -317,6 +320,232 @@ public struct StoredDosingDecision {
 
         public init(syncIdentifier: UUID) {
             self.syncIdentifier = syncIdentifier
+        }
+    }
+
+    public struct ReplayPredictionEffects: Codable, Equatable {
+        public let enabledEffectsRawValue: Int
+        public let prediction: [PredictedGlucoseValue]?
+        public let insulin: [GlucoseEffect]
+        public let carbs: [GlucoseEffect]
+        public let momentum: [GlucoseEffect]
+        public let retrospection: [GlucoseEffect]
+        public let insulinCounteractionEffects: [ReplayCounteractionEffect]
+        public let retrospectiveGlucoseDiscrepancies: [ReplayGlucoseChange]
+        public let sourceCarbEntries: [StoredCarbEntry]
+        public let sourceCarbStatuses: [ReplayCarbStatus]
+        public let normalizedDoseEntries: [DoseEntry]
+        public let settingsSnapshot: ReplaySettingsSnapshot?
+        public let sourceDataErrors: [String]
+
+        public init(
+            enabledEffectsRawValue: Int,
+            prediction: [PredictedGlucoseValue]? = nil,
+            insulin: [GlucoseEffect],
+            carbs: [GlucoseEffect],
+            momentum: [GlucoseEffect],
+            retrospection: [GlucoseEffect],
+            insulinCounteractionEffects: [ReplayCounteractionEffect] = [],
+            retrospectiveGlucoseDiscrepancies: [ReplayGlucoseChange] = [],
+            sourceCarbEntries: [StoredCarbEntry] = [],
+            sourceCarbStatuses: [ReplayCarbStatus] = [],
+            normalizedDoseEntries: [DoseEntry] = [],
+            settingsSnapshot: ReplaySettingsSnapshot? = nil,
+            sourceDataErrors: [String] = []
+        ) {
+            self.enabledEffectsRawValue = enabledEffectsRawValue
+            self.prediction = prediction
+            self.insulin = insulin
+            self.carbs = carbs
+            self.momentum = momentum
+            self.retrospection = retrospection
+            self.insulinCounteractionEffects = insulinCounteractionEffects
+            self.retrospectiveGlucoseDiscrepancies = retrospectiveGlucoseDiscrepancies
+            self.sourceCarbEntries = sourceCarbEntries
+            self.sourceCarbStatuses = sourceCarbStatuses
+            self.normalizedDoseEntries = normalizedDoseEntries
+            self.settingsSnapshot = settingsSnapshot
+            self.sourceDataErrors = sourceDataErrors
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                enabledEffectsRawValue: try container.decode(Int.self, forKey: .enabledEffectsRawValue),
+                prediction: try container.decodeIfPresent([PredictedGlucoseValue].self, forKey: .prediction),
+                insulin: try container.decode([GlucoseEffect].self, forKey: .insulin),
+                carbs: try container.decode([GlucoseEffect].self, forKey: .carbs),
+                momentum: try container.decode([GlucoseEffect].self, forKey: .momentum),
+                retrospection: try container.decode([GlucoseEffect].self, forKey: .retrospection),
+                insulinCounteractionEffects: try container.decodeIfPresent([ReplayCounteractionEffect].self, forKey: .insulinCounteractionEffects) ?? [],
+                retrospectiveGlucoseDiscrepancies: try container.decodeIfPresent([ReplayGlucoseChange].self, forKey: .retrospectiveGlucoseDiscrepancies) ?? [],
+                sourceCarbEntries: try container.decodeIfPresent([StoredCarbEntry].self, forKey: .sourceCarbEntries) ?? [],
+                sourceCarbStatuses: try container.decodeIfPresent([ReplayCarbStatus].self, forKey: .sourceCarbStatuses) ?? [],
+                normalizedDoseEntries: try container.decodeIfPresent([DoseEntry].self, forKey: .normalizedDoseEntries) ?? [],
+                settingsSnapshot: try container.decodeIfPresent(ReplaySettingsSnapshot.self, forKey: .settingsSnapshot),
+                sourceDataErrors: try container.decodeIfPresent([String].self, forKey: .sourceDataErrors) ?? []
+            )
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(enabledEffectsRawValue, forKey: .enabledEffectsRawValue)
+            try container.encodeIfPresent(prediction, forKey: .prediction)
+            try container.encode(insulin, forKey: .insulin)
+            try container.encode(carbs, forKey: .carbs)
+            try container.encode(momentum, forKey: .momentum)
+            try container.encode(retrospection, forKey: .retrospection)
+            try container.encodeIfPresent(!insulinCounteractionEffects.isEmpty ? insulinCounteractionEffects : nil, forKey: .insulinCounteractionEffects)
+            try container.encodeIfPresent(!retrospectiveGlucoseDiscrepancies.isEmpty ? retrospectiveGlucoseDiscrepancies : nil, forKey: .retrospectiveGlucoseDiscrepancies)
+            try container.encodeIfPresent(!sourceCarbEntries.isEmpty ? sourceCarbEntries : nil, forKey: .sourceCarbEntries)
+            try container.encodeIfPresent(!sourceCarbStatuses.isEmpty ? sourceCarbStatuses : nil, forKey: .sourceCarbStatuses)
+            try container.encodeIfPresent(!normalizedDoseEntries.isEmpty ? normalizedDoseEntries : nil, forKey: .normalizedDoseEntries)
+            try container.encodeIfPresent(settingsSnapshot, forKey: .settingsSnapshot)
+            try container.encodeIfPresent(!sourceDataErrors.isEmpty ? sourceDataErrors : nil, forKey: .sourceDataErrors)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case enabledEffectsRawValue
+            case prediction
+            case insulin
+            case carbs
+            case momentum
+            case retrospection
+            case insulinCounteractionEffects
+            case retrospectiveGlucoseDiscrepancies
+            case sourceCarbEntries
+            case sourceCarbStatuses
+            case normalizedDoseEntries
+            case settingsSnapshot
+            case sourceDataErrors
+        }
+    }
+
+    public struct ReplayCarbStatus: Codable, Equatable {
+        public let entry: StoredCarbEntry
+        public let absorption: ReplayAbsorbedCarbValue?
+        public let observedTimeline: [CarbValue]
+
+        public init(status: CarbStatus<StoredCarbEntry>) {
+            self.entry = status.entry
+            self.absorption = status.absorption.map { ReplayAbsorbedCarbValue(absorption: $0) }
+            self.observedTimeline = status.observedTimeline ?? []
+        }
+    }
+
+    public struct ReplayAbsorbedCarbValue: Codable, Equatable {
+        public let observedGrams: Double
+        public let clampedGrams: Double
+        public let totalGrams: Double
+        public let remainingGrams: Double
+        public let observedStartDate: Date
+        public let observedEndDate: Date
+        public let estimatedStartDate: Date
+        public let estimatedEndDate: Date
+        public let estimatedTimeRemaining: TimeInterval
+        public let timeToAbsorbObservedCarbs: TimeInterval
+
+        public init(absorption: AbsorbedCarbValue) {
+            let gram = HKUnit.gram()
+            self.observedGrams = absorption.observed.doubleValue(for: gram)
+            self.clampedGrams = absorption.clamped.doubleValue(for: gram)
+            self.totalGrams = absorption.total.doubleValue(for: gram)
+            self.remainingGrams = absorption.remaining.doubleValue(for: gram)
+            self.observedStartDate = absorption.observedDate.start
+            self.observedEndDate = absorption.observedDate.end
+            self.estimatedStartDate = absorption.estimatedDate.start
+            self.estimatedEndDate = absorption.estimatedDate.end
+            self.estimatedTimeRemaining = absorption.estimatedTimeRemaining
+            self.timeToAbsorbObservedCarbs = absorption.timeToAbsorbObservedCarbs
+        }
+    }
+
+    public struct ReplaySettingsSnapshot: Codable, Equatable {
+        public let timestamp: Date
+        public let maximumBasalRatePerHour: Double?
+        public let maximumBolus: Double?
+        public let suspendThreshold: GlucoseThreshold?
+        public let basalRateSchedule: BasalRateSchedule?
+        public let basalRateScheduleApplyingOverrideHistory: BasalRateSchedule?
+        public let carbRatioSchedule: CarbRatioSchedule?
+        public let carbRatioScheduleApplyingOverrideHistory: CarbRatioSchedule?
+        public let insulinSensitivitySchedule: InsulinSensitivitySchedule?
+        public let insulinSensitivityScheduleApplyingOverrideHistory: InsulinSensitivitySchedule?
+        public let glucoseTargetRangeSchedule: GlucoseRangeSchedule?
+        public let effectiveGlucoseTargetRangeSchedule: GlucoseRangeSchedule?
+        public let automaticDosingStrategy: AutomaticDosingStrategy
+        public let glucoseBasedApplicationFactorEnabled: Bool
+        public let timeBasedDoseApplicationFactor: Double
+        public let effectiveBolusApplicationFactor: Double?
+
+        public init(
+            timestamp: Date,
+            maximumBasalRatePerHour: Double?,
+            maximumBolus: Double?,
+            suspendThreshold: GlucoseThreshold?,
+            basalRateSchedule: BasalRateSchedule?,
+            basalRateScheduleApplyingOverrideHistory: BasalRateSchedule?,
+            carbRatioSchedule: CarbRatioSchedule?,
+            carbRatioScheduleApplyingOverrideHistory: CarbRatioSchedule?,
+            insulinSensitivitySchedule: InsulinSensitivitySchedule?,
+            insulinSensitivityScheduleApplyingOverrideHistory: InsulinSensitivitySchedule?,
+            glucoseTargetRangeSchedule: GlucoseRangeSchedule?,
+            effectiveGlucoseTargetRangeSchedule: GlucoseRangeSchedule?,
+            automaticDosingStrategy: AutomaticDosingStrategy,
+            glucoseBasedApplicationFactorEnabled: Bool,
+            timeBasedDoseApplicationFactor: Double,
+            effectiveBolusApplicationFactor: Double?
+        ) {
+            self.timestamp = timestamp
+            self.maximumBasalRatePerHour = maximumBasalRatePerHour
+            self.maximumBolus = maximumBolus
+            self.suspendThreshold = suspendThreshold
+            self.basalRateSchedule = basalRateSchedule
+            self.basalRateScheduleApplyingOverrideHistory = basalRateScheduleApplyingOverrideHistory
+            self.carbRatioSchedule = carbRatioSchedule
+            self.carbRatioScheduleApplyingOverrideHistory = carbRatioScheduleApplyingOverrideHistory
+            self.insulinSensitivitySchedule = insulinSensitivitySchedule
+            self.insulinSensitivityScheduleApplyingOverrideHistory = insulinSensitivityScheduleApplyingOverrideHistory
+            self.glucoseTargetRangeSchedule = glucoseTargetRangeSchedule
+            self.effectiveGlucoseTargetRangeSchedule = effectiveGlucoseTargetRangeSchedule
+            self.automaticDosingStrategy = automaticDosingStrategy
+            self.glucoseBasedApplicationFactorEnabled = glucoseBasedApplicationFactorEnabled
+            self.timeBasedDoseApplicationFactor = timeBasedDoseApplicationFactor
+            self.effectiveBolusApplicationFactor = effectiveBolusApplicationFactor
+        }
+    }
+
+    public struct ReplayCounteractionEffect: Codable, Equatable {
+        public let startDate: Date
+        public let endDate: Date
+        public let mgdlPerMinute: Double
+        public let integratedMgdl: Double
+
+        public init(effect: GlucoseEffectVelocity) {
+            self.startDate = effect.startDate
+            self.endDate = effect.endDate
+            self.mgdlPerMinute = effect.quantity.doubleValue(for: .milligramsPerDeciliterPerMinute)
+            self.integratedMgdl = effect.effect.quantity.doubleValue(for: .milligramsPerDeciliter)
+        }
+    }
+
+    public struct ReplayGlucoseChange: Codable, Equatable {
+        public let startDate: Date
+        public let endDate: Date
+        public let mgdl: Double
+
+        public init(startDate: Date, endDate: Date, mgdl: Double) {
+            self.startDate = startDate
+            self.endDate = endDate
+            self.mgdl = mgdl
+        }
+
+        public init(change: GlucoseChange) {
+            self.init(
+                startDate: change.startDate,
+                endDate: change.endDate,
+                mgdl: change.quantity.doubleValue(for: .milligramsPerDeciliter)
+            )
         }
     }
 
@@ -401,6 +630,7 @@ extension StoredDosingDecision: Codable {
                   insulinOnBoard: try container.decodeIfPresent(InsulinValue.self, forKey: .insulinOnBoard),
                   glucoseTargetRangeSchedule: try container.decodeIfPresent(GlucoseRangeSchedule.self, forKey: .glucoseTargetRangeSchedule),
                   predictedGlucose: try container.decodeIfPresent([PredictedGlucoseValue].self, forKey: .predictedGlucose),
+                  replayPredictionEffects: try container.decodeIfPresent(ReplayPredictionEffects.self, forKey: .replayPredictionEffects),
                   automaticDoseRecommendation: try container.decodeIfPresent(AutomaticDoseRecommendation.self, forKey: .automaticDoseRecommendation),
                   manualBolusRecommendation: try container.decodeIfPresent(ManualBolusRecommendationWithDate.self, forKey: .manualBolusRecommendation),
                   manualBolusRequested: try container.decodeIfPresent(Double.self, forKey: .manualBolusRequested),
@@ -429,6 +659,7 @@ extension StoredDosingDecision: Codable {
         try container.encodeIfPresent(insulinOnBoard, forKey: .insulinOnBoard)
         try container.encodeIfPresent(glucoseTargetRangeSchedule, forKey: .glucoseTargetRangeSchedule)
         try container.encodeIfPresent(predictedGlucose, forKey: .predictedGlucose)
+        try container.encodeIfPresent(replayPredictionEffects, forKey: .replayPredictionEffects)
         try container.encodeIfPresent(automaticDoseRecommendation, forKey: .automaticDoseRecommendation)
         try container.encodeIfPresent(manualBolusRecommendation, forKey: .manualBolusRecommendation)
         try container.encodeIfPresent(manualBolusRequested, forKey: .manualBolusRequested)
@@ -456,6 +687,7 @@ extension StoredDosingDecision: Codable {
         case insulinOnBoard
         case glucoseTargetRangeSchedule
         case predictedGlucose
+        case replayPredictionEffects
         case automaticDoseRecommendation
         case manualBolusRecommendation
         case manualBolusRequested
